@@ -1,0 +1,8 @@
+﻿<NUnitProject>
+  <Settings activeconfig="Debug" />
+  <Config name="Debug" binpathtype="Auto">
+    <assembly path="ConcurrentPriorityTaskRunnerTest\bin\Debug\ConcurrentPriorityTaskRunnerTest.dll" />
+    <assembly path="ConcurrentPriorityTaskRunnerTest\bin\Release\ConcurrentPriorityTaskRunnerTest.dll" />
+  </Config>
+  <Config name="Release" binpathtype="Auto" />
+</NUnitProject>
