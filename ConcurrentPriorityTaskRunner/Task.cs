@@ -8,7 +8,7 @@ namespace Axon.Utilities
 	/// A Task represents a single work item to be executed by the ConcurrentPriorityTaskRunner.
 	/// </summary>
 	/// <typeparam name="T">The data type of the execution context object.</typeparam>
-	public class Task<T>
+	private class Task
 	{
 		#region Instance members
 
@@ -21,7 +21,14 @@ namespace Axon.Utilities
 		/// <summary>
 		/// A generically-typed object providing the execution context for the callback.
 		/// </summary>
-		public T Context { get; set; }
+		public Object Context { get; set; }
+
+
+		/// <summary>
+		/// A DoneSignal that can be attached to this Task to allow it to communicate that it
+		/// has been completed to the external service that called Run().
+		/// </summary>
+		public DoneSignal DoneSignal { get; set; }
 
 		#endregion
 
@@ -32,7 +39,7 @@ namespace Axon.Utilities
 		/// </summary>
 		public Task()
 		{
-			Context = default( T );
+			Context = null;
 			Callback = null;
 		}
 
@@ -41,10 +48,10 @@ namespace Axon.Utilities
 		/// </summary>
 		/// <param name="context">A generically-type context object used by the action.</param>
 		/// <param name="action">A function delegate to be called by Run().</param>
-		public Task( WaitCallback callback, T context )
+		public Task( Object context, WaitCallback callback )
 		{
-			Callback = callback;
 			Context = context;
+			Callback = callback;
 		}
 
 		#endregion
@@ -64,7 +71,20 @@ namespace Axon.Utilities
 				}
 				throw new InvalidOperationException( "Cannot Run() a task with a null Callback." );
 			}
-			ThreadPool.QueueUserWorkItem( Callback, Context );
+			ThreadPool.QueueUserWorkItem( 
+				( context ) => {
+					if ( DoneSignal != null )
+					{
+						DoneSignal.Set();
+					}
+					Callback( context );
+					if ( DoneSignal != null )
+					{
+						DoneSignal.Reset();
+					}
+				}, 
+				Context 
+			);
 		}
 
 		#endregion
