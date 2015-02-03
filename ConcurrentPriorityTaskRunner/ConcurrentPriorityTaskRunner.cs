@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 using Axon.Collections;
 
@@ -10,30 +9,55 @@ namespace Axon.Utilities
 	/// An enumeration of the possible operating states that the ConcurrentPriorityTaskRunner can 
 	/// belong to.
 	/// </summary>
-	private enum TaskRunnerState
+	enum TaskRunnerState
 	{
 		Idle, Running, Stopping
 	}
 
+
 	/// <summary>
 	/// A thread pooling task runner that executes tasks in parallel with user-specified priority. 
-	/// Higher-priority tasks will always begin execution before lower-priority tasks.
+	/// Higher-priority tasks will always begin execution before lower-priority tasks. Tasks with 
+	/// the same priority will begin execution in the same order as they were enqueued (FIFO).
 	/// </summary>
-    public class ConcurrentPriorityTaskRunner
+    class ConcurrentPriorityTaskRunner
 	{
 		#region Instance members
 
 		/// <summary>
-		/// An array of DoneSignals that tracks the completion of tasks being run by the task 
-		/// runner on the thread pool.
+		/// An event to signal the completion of all tasks in the queue.
 		/// </summary>
-		private DoneSignal[] __doneSignals;
+		public event Action AllTasksDone;
 
 
 		/// <summary>
-		/// Indicates whether the queue still contains any critical tasks to be run or not.
+		/// An event to signal the completion of all critical tasks in the queue.
 		/// </summary>
-		private bool __hasCriticalTasks;
+		public event Action CriticalTasksDone;
+
+
+		/// <summary>
+		/// The number of critical tasks currently being executed in the ThreadPool.
+		/// </summary>
+		private int __runningCriticalTasks;
+
+
+		/// <summary>
+		///	This object exists only as a synchronization lock for __runningCriticalTasks.
+		/// </summary>
+		private object __runningCriticalTasksLock;
+
+
+		/// <summary>
+		/// The number of non-critical tasks currently being executed in the ThreadPool.
+		/// </summary>
+		private int __runningNoncriticalTasks;
+
+
+		/// <summary>
+		///	This object exists only as a synchronization lock for __runningNoncriticalTasks.
+		/// </summary>
+		private object __runningNoncriticalTasksLock;
 
 
 		/// <summary>
@@ -49,26 +73,49 @@ namespace Axon.Utilities
 
 
 		/// <summary>
-		/// An object used exclusively for maintaining synchronization with some outside thread or 
-		/// process (typically the main Unity thread in my case).
+		/// The number of critical tasks currently waiting to be completed.
 		/// </summary>
-		private object __synchronizationMonitor;
+		private int __waitingCriticalTasks;
+
+
+		/// <summary>
+		///	This object exists only as a synchronization lock for __waitingCriticalTasks.
+		/// </summary>
+		private object __waitingCriticalTasksLock;
+
+
+		/// <summary>
+		/// The number of non-critical currently waiting to be completed.
+		/// </summary>
+		private int __waitingNoncriticalTasks;
+
+
+		/// <summary>
+		///	This object exists only as a synchronization lock for __waitingNoncriticalTasks.
+		/// </summary>
+		private object __waitingNoncriticalTasksLock;
 
 
 		/// <summary>
 		/// Indicates whether the queue still contains any critical tasks to be run or not.
 		/// </summary>
-		public bool HasCriticalTasks
-		{
-			get { return __hasCriticalTasks; }
+		public bool HasEnqueuedCriticalTasks {
+			get { return ( __waitingCriticalTasks - __runningCriticalTasks ) > 0; }
+		}
+
+
+		/// <summary>
+		/// Indicates whether there are any critical tasks still waiting to complete.
+		/// </summary>
+		public bool HasWaitingCriticalTasks {
+			get { return __runningCriticalTasks  > 0; }
 		}
 
 
 		/// <summary>
 		/// Indicates whether or not the state of the task runner is currently set to Idle.
 		/// </summary>
-		public bool IsIdle
-		{
+		public bool IsIdle {
 			get { return __state == TaskRunnerState.Idle; }
 		}
 
@@ -76,8 +123,7 @@ namespace Axon.Utilities
 		/// <summary>
 		/// Indicates whether or not the state of the task runner is currently set to Running.
 		/// </summary>
-		public bool IsRunning
-		{
+		public bool IsRunning {
 			get { return __state == TaskRunnerState.Running; }
 		}
 
@@ -85,8 +131,7 @@ namespace Axon.Utilities
 		/// <summary>
 		/// Indicates whether or not the state of the task runner is currently set to Stopping.
 		/// </summary>
-		public bool IsStopping 
-		{
+		public bool IsStopping  {
 			get { return __state == TaskRunnerState.Stopping; }
 		}
 
@@ -96,7 +141,36 @@ namespace Axon.Utilities
 		/// </summary>
 		public float MinCriticalPriority { get; set; }
 
+
+		/// <summary>
+		/// The total number of tasks currently waiting to be completed.
+		/// </summary>
+		public int RunningTasks {
+			get { return __runningCriticalTasks + __runningNoncriticalTasks; }
+		}
+
+
+		/// <summary>
+		/// Check the murrent maximum number of threads that the ThreadPool can run simultaneously.
+		/// </summary>
+		private int ThreadPoolMaxThreads {
+			get { 
+				int workerThreads, unused;
+				ThreadPool.GetMaxThreads( out workerThreads, out unused );
+				return workerThreads; 
+			}
+		}
+
+
+		/// <summary>
+		/// The total number of tasks currently waiting to complete.
+		/// </summary>
+		public int WaitingTasks {
+			get { return __waitingCriticalTasks + __waitingNoncriticalTasks; }
+		}
+
 		#endregion
+
 
 		#region Constructors
 
@@ -106,6 +180,8 @@ namespace Axon.Utilities
 		public ConcurrentPriorityTaskRunner()
 		{
 			__queue = new ConcurrentPriorityQueue<Task>();
+			__runningCriticalTasks = 0;
+			__runningNoncriticalTasks = 0;
 		}
 
 
@@ -118,9 +194,12 @@ namespace Axon.Utilities
 		public ConcurrentPriorityTaskRunner( int initialCapacity )
 		{
 			__queue = new ConcurrentPriorityQueue<Task>( initialCapacity );
+			__runningCriticalTasks = 0;
+			__runningNoncriticalTasks = 0;
 		}
 
 		#endregion
+
 
 		#region Public methods
 
@@ -132,17 +211,28 @@ namespace Axon.Utilities
 		/// <param name="context">The execution context object that will be passed to the callback 
 		/// when the callback is called by the thread pool.</param>
 		/// <param name="callback">A callback function to be executed on a thread pool.</param>
-		/// <param name="forceIfStopping">When set, this flag allows the caller to enqueue a task 
-		/// even if the task runner is in the process of stopping.</param>
 		public 
 		void 
-		EnqueueTask( float priority, Object context, WaitCallback callback, bool forceIfStopping = false )
+		Enqueue( float priority, Object context, WaitCallback callback )
 		{
-			if ( IsStopping && ! forceIfStopping )
+			if ( IsStopping )
 			{
-				throw new InvalidOperationException( "Cannot enqueue a task while the task runner is stopping (without forceIfStopping = true)." );
+				throw new InvalidOperationException( "Cannot enqueue a task while the task runner is stopping." );
 			}
-			__queue.Enqueue( priority, new Task( context, callback ) );
+
+			// Create a new task, wrap it in a PriorityValuePair, and enqueue it.
+			Task task = new Task( context, callback );
+			PriorityValuePair<Task> elem = new PriorityValuePair<Task>( priority, task );
+			__queue.Enqueue( elem );
+
+			// Mark the task as waiting to complete.
+			onWaitingTask( elem );
+
+			// Subscribe an event listener to the task's CallbackReturned event that will release 
+			// the task resources and allow another to run.
+			task.CallbackReturned += () => {
+				onCompletedTask( elem );
+			};
 		}
 
 
@@ -156,7 +246,7 @@ namespace Axon.Utilities
 			if ( IsIdle )
 			{
 				// Launch a thread to handle executing tasks on the thread pool.
-				new Thread( new ThreadStart( ThreadLoop ) );
+				new Thread( new ThreadStart( ThreadProc ) );
 			}
 		}
 
@@ -170,36 +260,219 @@ namespace Axon.Utilities
 		{
 			__state = TaskRunnerState.Stopping;
 		}
-		
-
-		/// <summary>
-		/// This function allows another thread to wait for synchronization with the task runner. 
-		/// Synchronization entails that ALL critical tasks have been completed, although any 
-		/// number of non-critical tasks may be enqueued that have not yet be completed.
-		/// </summary>
-		/// <param name="clearIncompleteTasks">Specifies whether or not any remaining incomplete 
-		/// tasks in the queue should be cleared at the time of synchronization.</param>
-		public 
-		void 
-		WaitForSynchronization( bool clearIncompleteTasks )
-		{
-			try
-			{
-				Monitor.Enter( __synchronizationMonitor );
-			}
-			finally
-            {
-				if ( clearIncompleteTasks )
-				{
-					__queue.Clear();
-				}
-                Monitor.Exit( __synchronizationMonitor );
-            }
-		}
 
 		#endregion
 
+
 		#region Private methods
+
+		/// <summary>
+		/// Signal that this task is no longer active nor is it waiting to complete (it's done!).
+		/// </summary>
+		#if DEBUG
+		public
+		#else
+		private 
+		#endif
+		void 
+		onCompletedTask( PriorityValuePair<Task> elem )
+		{
+			// Based on its priority, increment the appropriate active counter.
+			if ( elem.Priority >= MinCriticalPriority )
+			{
+				// Lock the thread -- CRITICAL SECTION BEGIN
+				Monitor.Enter( __runningCriticalTasksLock );
+				try
+				{
+					__runningCriticalTasks--;
+				}
+				finally
+				{
+					Monitor.Exit( __runningCriticalTasksLock );
+					// Unlock the thread -- CRITICAL SECTION END
+				}
+				// Lock the thread -- CRITICAL SECTION BEGIN
+				Monitor.Enter( __waitingCriticalTasksLock );
+				try
+				{
+					__waitingCriticalTasks--;
+					if ( __waitingCriticalTasks <= 0 )
+					{
+						__waitingCriticalTasks = 0;
+						if ( CriticalTasksDone != null )
+						{
+							CriticalTasksDone();
+						}
+					}
+				}
+				finally
+				{
+					Monitor.Exit( __waitingCriticalTasksLock );
+					// Unlock the thread -- CRITICAL SECTION END
+				}
+			}
+			else
+			{
+				// Lock the thread -- CRITICAL SECTION BEGIN
+				Monitor.Enter( __runningNoncriticalTasksLock );
+				try
+				{
+					__runningNoncriticalTasks--;
+				}
+				finally
+				{
+					Monitor.Exit( __runningNoncriticalTasksLock );
+					// Unlock the thread -- CRITICAL SECTION END
+				}
+				// Lock the thread -- CRITICAL SECTION BEGIN
+				Monitor.Enter( __waitingNoncriticalTasksLock );
+				try
+				{
+					__waitingNoncriticalTasks--;
+					if ( __waitingNoncriticalTasks <= 0 )
+					{
+						__waitingNoncriticalTasks = 0;
+						if ( AllTasksDone != null )
+						{
+							AllTasksDone();
+						}
+					}
+				}
+				finally
+				{
+					Monitor.Exit( __waitingNoncriticalTasksLock );
+					// Unlock the thread -- CRITICAL SECTION END
+				}
+			}
+		}
+
+
+		/// <summary>
+		/// Signal that a task has just begun executing on the ThreadPool.
+		/// </summary>
+		#if DEBUG
+		public
+		#else
+		private 
+		#endif
+		void 
+		onRunningTask( PriorityValuePair<Task> elem )
+		{
+			// Based on its priority, increment the appropriate active counter.
+			if ( elem.Priority >= MinCriticalPriority )
+			{
+				// Lock the thread -- CRITICAL SECTION BEGIN
+				Monitor.Enter( __runningCriticalTasksLock );
+				try
+				{
+					__runningCriticalTasks++;
+				}
+				finally
+				{
+					Monitor.Exit( __runningCriticalTasksLock );
+					// Unlock the thread -- CRITICAL SECTION END
+				}
+			}
+			else
+			{
+				// Lock the thread -- CRITICAL SECTION BEGIN
+				Monitor.Enter( __runningNoncriticalTasksLock );
+				try
+				{
+					__runningNoncriticalTasks++;
+				}
+				finally
+				{
+					Monitor.Exit( __runningNoncriticalTasksLock );
+					// Unlock the thread -- CRITICAL SECTION END
+				}
+			}
+		}
+
+
+		/// <summary>
+		/// Signal that a new task is waiting to be completed.
+		/// </summary>
+		#if DEBUG
+		public
+		#else
+		private 
+		#endif
+		void 
+		onWaitingTask( PriorityValuePair<Task> elem )
+		{
+			// Based on its priority, increment the appropriate waiting counter.
+			if ( elem.Priority >= MinCriticalPriority )
+			{
+				// Lock the thread -- CRITICAL SECTION BEGIN
+				Monitor.Enter( __waitingCriticalTasksLock );
+				try
+				{
+					__waitingCriticalTasks++;
+				}
+				finally
+				{
+					Monitor.Exit( __waitingCriticalTasksLock );
+					// Unlock the thread -- CRITICAL SECTION END
+				}
+			}
+			else
+			{
+				// Lock the thread -- CRITICAL SECTION BEGIN
+				Monitor.Enter( __waitingNoncriticalTasksLock );
+				try
+				{
+					__waitingNoncriticalTasks++;
+				}
+				finally
+				{
+					Monitor.Exit( __waitingNoncriticalTasksLock );
+					// Unlock the thread -- CRITICAL SECTION END
+				}
+			}
+		}
+
+
+		/// <summary>
+		/// Dequeue a task and run it.
+		/// </summary>
+		#if DEBUG
+		public
+		#else
+		private 
+		#endif 
+		void 
+		RunTask()
+		{
+			// Lock the thread -- CRITICAL SECTION BEGIN
+			Monitor.Enter( __queue );
+			try
+			{
+				PriorityValuePair<Task> elem = __queue.Dequeue();
+				if ( elem != null )
+				{
+					// Execute the task on the thread pool.
+					Task task = elem.Value;
+					if ( task != null )
+					{
+						// We're passing a null context here because the task is packaged with its 
+						// own execution context that will be inserted during Task.Run().
+						ThreadPool.QueueUserWorkItem( ( x ) => { task.Run(); }, null );
+					}
+
+					// Mark the task as starting execution.
+					// Note: This should run even if the task is null above, otherwise the counts
+					// for the number of running/waiting tasks will become skewed.
+					onRunningTask( elem );
+				}
+			}
+			finally
+			{
+				Monitor.Exit( __queue );
+				// Unlock the thread -- CRITICAL SECTION END
+			}
+		}
+
 
 		/// <summary>
 		/// The function run by the queue management thread initiated by Start(). This sets the 
@@ -213,62 +486,35 @@ namespace Axon.Utilities
 		private 
 		#endif
 		void 
-		ThreadLoop()
+		ThreadProc()
 		{
 			// Change state to indicate that the task runner is started.
 			__state = TaskRunnerState.Running;
 
 			// Continue looping until Stop() is called and all critical tasks are finished.
-			while ( !IsStopping || IsStopping && __hasCriticalTasks ) 
+			while ( !IsStopping || IsStopping && HasEnqueuedCriticalTasks ) 
 			{
 				// Most of this is only important if something is in the queue.
-				if ( __queue.Peek() != null )
+				if ( RunningTasks < ThreadPoolMaxThreads && __queue.Peek() != null )
 				{
-					// Determine if a thread is available by checking the done signals for 
-					// an inactive signal.
-					DoneSignal doneSignal = Array.Find( __doneSignals, x => { return x.IsDone; } );
-
-					// If a thread is available, run the next task on the queue.
-					if ( doneSignal != null )
-					{
-						PriorityValuePair<Task> elem = __queue.Dequeue();
-						Task task = elem.Value;
-						if ( task != null )
-						{
-							// Check if the current task is a critical task and use that to
-							// handle synchronization signaling.
-							if ( elem.Priority >= MinCriticalPriority )
-							{
-								__hasCriticalTasks = true;
-								Monitor.Enter( __synchronizationMonitor );
-							}
-							else
-							{
-								__hasCriticalTasks = false;
-								Monitor.Exit( __synchronizationMonitor );
-							}
-
-							// Attach the inactive done signal to the task so we can 
-							// monitor when it finishes running.
-							task.DoneSignal = doneSignal;
-
-							// Execute the task on the thread pool (Run() handles that).
-							task.Run( true );
-						}
-					}
+					RunTask();
 				}
-						
-				// Yield the rest of the time slice.
+				else
+				{
+					// Yield the rest of the time slice.
+					Thread.Sleep( 0 );
+				}
+			}
+
+			// Wait for all critical tasks to complete before stopping.
+			while ( HasWaitingCriticalTasks )
+			{
 				Thread.Sleep( 0 );
 			}
 
-			// Wait for all running tasks to complete.
-			ManualResetEvent[] doneEvents = __doneSignals.Select( x => x.DoneEvent ).ToArray();
-			WaitHandle.WaitAll( doneEvents );
-
 			// Flag the task runner as stopped.
 			__state = TaskRunnerState.Idle;
-		} 
+		}
 
 		#endregion
 	}
