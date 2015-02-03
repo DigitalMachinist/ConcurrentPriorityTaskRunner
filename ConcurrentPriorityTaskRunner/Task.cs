@@ -6,8 +6,9 @@ namespace Axon.Utilities
 	/// <summary>
 	/// A Task represents a single work item to be executed by the ConcurrentPriorityTaskRunner.
 	/// </summary>
-	/// <typeparam name="T">The data type of the execution context object.</typeparam>
-	class Task
+	public
+	class 
+	Task
 	{
 		#region Instance members
 
@@ -20,7 +21,7 @@ namespace Axon.Utilities
 		/// <summary>
 		/// A generically-typed object providing the execution context for the callback.
 		/// </summary>
-		public Object Context { get; set; }
+		public object Context { get; set; }
 
 
 		/// <summary>
@@ -47,7 +48,7 @@ namespace Axon.Utilities
 		/// </summary>
 		/// <param name="context">A generically-type context object used by the action.</param>
 		/// <param name="action">A function delegate to be called by Run().</param>
-		public Task( Object context, WaitCallback callback )
+		public Task( object context, WaitCallback callback )
 		{
 			Context = context;
 			Callback = callback;

@@ -9,9 +9,10 @@ namespace Axon.Utilities
 	/// An enumeration of the possible operating states that the ConcurrentPriorityTaskRunner can 
 	/// belong to.
 	/// </summary>
-	enum TaskRunnerState
+	enum 
+	TaskRunnerState
 	{
-		Idle, Running, Stopping
+		Running, Stopped, Stopping
 	}
 
 
@@ -20,7 +21,9 @@ namespace Axon.Utilities
 	/// Higher-priority tasks will always begin execution before lower-priority tasks. Tasks with 
 	/// the same priority will begin execution in the same order as they were enqueued (FIFO).
 	/// </summary>
-    class ConcurrentPriorityTaskRunner
+    public 
+	class 
+	ConcurrentPriorityTaskRunner
 	{
 		#region Instance members
 
@@ -34,6 +37,25 @@ namespace Axon.Utilities
 		/// An event to signal the completion of all critical tasks in the queue.
 		/// </summary>
 		public event Action CriticalTasksDone;
+
+
+		/// <summary>
+		/// An event to signal that the task runner started (is now in the Running state).
+		/// </summary>
+		public event Action Started;
+
+
+		/// <summary>
+		/// An event to signal that the task runner stopped (completed all critical tasks and 
+		/// exited the primary ThreadProc() loop).
+		/// </summary>
+		public event Action Stopped;
+
+
+		/// <summary>
+		/// A concurrent priority queue used to manage and order all of the tasks to be run.
+		/// </summary>
+		private ConcurrentPriorityQueue<Task> __queue;
 
 
 		/// <summary>
@@ -61,15 +83,15 @@ namespace Axon.Utilities
 
 
 		/// <summary>
-		/// A concurrent priority queue used to manage and order all of the tasks to be run.
+		/// The current operating state of the task runner.
 		/// </summary>
-		private ConcurrentPriorityQueue<Task> __queue;
+		private volatile TaskRunnerState __state;
 
 
 		/// <summary>
-		/// The current operating state of the task runner.
+		/// The thread the task runner's ThreadProc() method executes under.
 		/// </summary>
-		private TaskRunnerState __state;
+		private Thread __thread;
 
 
 		/// <summary>
@@ -105,18 +127,42 @@ namespace Axon.Utilities
 
 
 		/// <summary>
-		/// Indicates whether there are any critical tasks still waiting to complete.
+		/// Indicates whether the queue still contains any non-critical tasks to be run or not.
 		/// </summary>
-		public bool HasWaitingCriticalTasks {
-			get { return __runningCriticalTasks  > 0; }
+		public bool HasEnqueuedNoncriticalTasks {
+			get { return ( __waitingNoncriticalTasks - __runningNoncriticalTasks ) > 0; }
 		}
 
 
 		/// <summary>
-		/// Indicates whether or not the state of the task runner is currently set to Idle.
+		/// Indicates whether there are any critical tasks currently being executed.
 		/// </summary>
-		public bool IsIdle {
-			get { return __state == TaskRunnerState.Idle; }
+		public bool HasRunningCriticalTasks {
+			get { return __runningCriticalTasks > 0; }
+		}
+
+
+		/// <summary>
+		/// Indicates whether there are any non-critical tasks currently being executed.
+		/// </summary>
+		public bool HasRunningNoncriticalTasks {
+			get { return __runningNoncriticalTasks > 0; }
+		}
+
+
+		/// <summary>
+		/// Indicates whether there are any critical tasks still waiting to complete.
+		/// </summary>
+		public bool HasWaitingCriticalTasks {
+			get { return __waitingCriticalTasks > 0; }
+		}
+
+
+		/// <summary>
+		/// Indicates whether there are any non-critical tasks still waiting to complete.
+		/// </summary>
+		public bool HasWaitingNoncriticalTasks {
+			get { return __waitingNoncriticalTasks > 0; }
 		}
 
 
@@ -125,6 +171,14 @@ namespace Axon.Utilities
 		/// </summary>
 		public bool IsRunning {
 			get { return __state == TaskRunnerState.Running; }
+		}
+
+
+		/// <summary>
+		/// Indicates whether or not the state of the task runner is currently set to Stopped.
+		/// </summary>
+		public bool IsStopped {
+			get { return __state == TaskRunnerState.Stopped; }
 		}
 
 
@@ -139,11 +193,27 @@ namespace Axon.Utilities
 		/// <summary>
 		/// Specifies the minimum priority for a task that is considered to be a critical task.
 		/// </summary>
-		public float MinCriticalPriority { get; set; }
+		public double MinCriticalPriority { get; set; }
 
 
 		/// <summary>
-		/// The total number of tasks currently waiting to be completed.
+		/// The total number of critical tasks currently being executed.
+		/// </summary>
+		public int RunningCriticalTasks {
+			get { return __runningCriticalTasks; }
+		}
+
+
+		/// <summary>
+		/// The total number of non-critical tasks currently being executed.
+		/// </summary>
+		public int RunningNoncriticalTasks {
+			get { return __runningNoncriticalTasks; }
+		}
+
+
+		/// <summary>
+		/// The total number of tasks currently being executed.
 		/// </summary>
 		public int RunningTasks {
 			get { return __runningCriticalTasks + __runningNoncriticalTasks; }
@@ -159,6 +229,22 @@ namespace Axon.Utilities
 				ThreadPool.GetMaxThreads( out workerThreads, out unused );
 				return workerThreads; 
 			}
+		}
+
+
+		/// <summary>
+		/// The total number of critical tasks currently waiting to be completed.
+		/// </summary>
+		public int WaitingCriticalTasks {
+			get { return __waitingCriticalTasks; }
+		}
+
+
+		/// <summary>
+		/// The total number of non-critical tasks currently waiting to be completed.
+		/// </summary>
+		public int WaitingNoncriticalTasks {
+			get { return __waitingNoncriticalTasks; }
 		}
 
 
@@ -180,8 +266,16 @@ namespace Axon.Utilities
 		public ConcurrentPriorityTaskRunner()
 		{
 			__queue = new ConcurrentPriorityQueue<Task>();
+			__state = TaskRunnerState.Stopped;
+			__thread = null;
 			__runningCriticalTasks = 0;
 			__runningNoncriticalTasks = 0;
+			__waitingCriticalTasks = 0;
+			__waitingNoncriticalTasks = 0;
+			__runningCriticalTasksLock = new object();
+			__runningNoncriticalTasksLock = new object();
+			__waitingCriticalTasksLock = new object();
+			__waitingNoncriticalTasksLock = new object();
 		}
 
 
@@ -194,14 +288,81 @@ namespace Axon.Utilities
 		public ConcurrentPriorityTaskRunner( int initialCapacity )
 		{
 			__queue = new ConcurrentPriorityQueue<Task>( initialCapacity );
+			__state = TaskRunnerState.Stopped;
+			__thread = null;
 			__runningCriticalTasks = 0;
 			__runningNoncriticalTasks = 0;
+			__waitingCriticalTasks = 0;
+			__waitingNoncriticalTasks = 0;
+			__runningCriticalTasksLock = new object();
+			__runningNoncriticalTasksLock = new object();
+			__waitingCriticalTasksLock = new object();
+			__waitingNoncriticalTasksLock = new object();
 		}
 
 		#endregion
 
 
 		#region Public methods
+
+		/// <summary>
+		/// Clear the task runner of all enqueued tasks.
+		/// </summary>
+		public
+		void
+		Clear()
+		{
+			// Clear the priority queue.
+			__queue.Clear();
+
+			// Lock the thread -- CRITICAL SECTION BEGIN
+			Monitor.Enter( __runningCriticalTasksLock );
+			try
+			{
+				__runningCriticalTasks = 0;
+			}
+			finally
+			{
+				Monitor.Exit( __runningCriticalTasksLock );
+				// Unlock the thread -- CRITICAL SECTION END
+			}
+
+			// Lock the thread -- CRITICAL SECTION BEGIN
+			Monitor.Enter( __runningNoncriticalTasksLock );
+			try
+			{
+				__runningNoncriticalTasks = 0;
+			}
+			finally
+			{
+				Monitor.Exit( __runningNoncriticalTasksLock );
+				// Unlock the thread -- CRITICAL SECTION END
+			}
+			
+			// Lock the thread -- CRITICAL SECTION BEGIN
+			Monitor.Enter( __waitingCriticalTasksLock );
+			try
+			{
+				__waitingCriticalTasks = 0;
+			}
+			finally
+			{
+				Monitor.Exit( __waitingCriticalTasksLock );
+				// Unlock the thread -- CRITICAL SECTION END
+			}
+
+			// Lock the thread -- CRITICAL SECTION BEGIN
+			Monitor.Enter( __waitingNoncriticalTasksLock );
+			try
+			{
+				__waitingNoncriticalTasks = 0;
+			}
+			finally
+			{
+				Monitor.Exit( __waitingNoncriticalTasksLock );
+				// Unlock the thread -- CRITICAL SECTION END
+			}
+		}
 
 		/// <summary>
 		/// Enqueue a new task to be run.
@@ -213,11 +374,14 @@ namespace Axon.Utilities
 		/// <param name="callback">A callback function to be executed on a thread pool.</param>
 		public 
 		void 
-		Enqueue( float priority, Object context, WaitCallback callback )
+		Enqueue( double priority, WaitCallback callback, object context = null )
 		{
 			if ( IsStopping )
 			{
-				throw new InvalidOperationException( "Cannot enqueue a task while the task runner is stopping." );
+				// We want to block new tasks from being queued while the task runner is trying to
+				// shut down, so that it can successfully stop instead of being bogged down by new
+				// tasks forever.
+				throw new InvalidOperationException( "Cannot enqueue tasks while the task runner is stopping." );
 			}
 
 			// Create a new task, wrap it in a PriorityValuePair, and enqueue it.
@@ -243,11 +407,16 @@ namespace Axon.Utilities
 		void 
 		Start()
 		{
-			if ( IsIdle )
+			if ( !IsStopped )
 			{
-				// Launch a thread to handle executing tasks on the thread pool.
-				new Thread( new ThreadStart( ThreadProc ) );
+				// If the task runner isn't Stopped, we don't want to launch another thread and 
+				// maniuplate the state unnecessarily. That would be an error.
+				throw new InvalidOperationException( "Cannot start a task runner that is not stopped." );
 			}
+
+			// Launch a thread to handle executing tasks on the thread pool.
+			__thread = new Thread( ThreadProc );
+			__thread.Start();
 		}
 
 
@@ -258,6 +427,14 @@ namespace Axon.Utilities
 		void 
 		Stop()
 		{
+			if ( !IsRunning )
+			{
+				// If the task runner isn't Stopped, we don't want to maniuplate  the state. That 
+				// would be an error.
+				throw new InvalidOperationException( "Cannot stop a task runner that is not running." );
+			}
+
+			// Transition to Stopping state to cause threadProc() to wind down.
 			__state = TaskRunnerState.Stopping;
 		}
 
@@ -434,47 +611,6 @@ namespace Axon.Utilities
 
 
 		/// <summary>
-		/// Dequeue a task and run it.
-		/// </summary>
-		#if DEBUG
-		public
-		#else
-		private 
-		#endif 
-		void 
-		RunTask()
-		{
-			// Lock the thread -- CRITICAL SECTION BEGIN
-			Monitor.Enter( __queue );
-			try
-			{
-				PriorityValuePair<Task> elem = __queue.Dequeue();
-				if ( elem != null )
-				{
-					// Execute the task on the thread pool.
-					Task task = elem.Value;
-					if ( task != null )
-					{
-						// We're passing a null context here because the task is packaged with its 
-						// own execution context that will be inserted during Task.Run().
-						ThreadPool.QueueUserWorkItem( ( x ) => { task.Run(); }, null );
-					}
-
-					// Mark the task as starting execution.
-					// Note: This should run even if the task is null above, otherwise the counts
-					// for the number of running/waiting tasks will become skewed.
-					onRunningTask( elem );
-				}
-			}
-			finally
-			{
-				Monitor.Exit( __queue );
-				// Unlock the thread -- CRITICAL SECTION END
-			}
-		}
-
-
-		/// <summary>
 		/// The function run by the queue management thread initiated by Start(). This sets the 
 		/// state to Running and begins executing tasks on a thread pool until the state is set
 		/// to Stopping, at which time it will continue to execute critical tasks until they are 
@@ -491,13 +627,32 @@ namespace Axon.Utilities
 			// Change state to indicate that the task runner is started.
 			__state = TaskRunnerState.Running;
 
+			// Emit an event to notify listeners that the task runner started up.
+			if ( Started != null )
+			{
+				Started();
+			}
+
 			// Continue looping until Stop() is called and all critical tasks are finished.
 			while ( !IsStopping || IsStopping && HasEnqueuedCriticalTasks ) 
 			{
 				// Most of this is only important if something is in the queue.
 				if ( RunningTasks < ThreadPoolMaxThreads && __queue.Peek() != null )
 				{
-					RunTask();
+					// Execute the task on the thread pool.
+					PriorityValuePair<Task> elem = __queue.Dequeue();
+					Task task = elem.Value;
+					if ( task != null )
+					{
+						// We're passing a null context here because the task is packaged with its 
+						// own execution context that will be inserted during Task.Run().
+						ThreadPool.QueueUserWorkItem( ( x ) => { task.Run(); }, null );
+					}
+
+					// Mark the task as starting execution.
+					// Note: This should run even if the task is null above, otherwise the counts
+					// for the number of running/waiting tasks will become skewed.
+					onRunningTask( elem );
 				}
 				else
 				{
@@ -506,14 +661,21 @@ namespace Axon.Utilities
 				}
 			}
 
-			// Wait for all critical tasks to complete before stopping.
+			// Wait for all critical tasks to finish running before stopping.
 			while ( HasWaitingCriticalTasks )
 			{
 				Thread.Sleep( 0 );
 			}
 
 			// Flag the task runner as stopped.
-			__state = TaskRunnerState.Idle;
+			__state = TaskRunnerState.Stopped;
+			__thread = null;
+
+			// Emit an event to notify listeners that the task runner stopped.
+			if ( Stopped != null )
+			{
+				Stopped();
+			}
 		}
 
 		#endregion

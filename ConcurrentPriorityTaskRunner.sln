@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 2013
-VisualStudioVersion = 12.0.30324.0
+# Visual Studio Express 2013 for Windows Desktop
+VisualStudioVersion = 12.0.31101.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConcurrentPriorityTaskRunner", "ConcurrentPriorityTaskRunner\ConcurrentPriorityTaskRunner.csproj", "{ECC24CC2-36AE-448F-BE9C-F5F96E521A68}"
 EndProject
@@ -10,6 +10,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConcurrentBinaryMinHeap", "..\ConcurrentBinaryMinHeap\ConcurrentBinaryMinHeap\ConcurrentBinaryMinHeap.csproj", "{33D0AFB1-536E-4316-B240-871C54A6096F}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConcurrentPriorityTaskRunnerTest", "ConcurrentPriorityTaskRunnerTest\ConcurrentPriorityTaskRunnerTest.csproj", "{22CFA294-267E-45E3-BD64-69787BA12900}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConcurrentPriorityTaskRunnerExample", "ConcurrentPriorityTaskRunnerExample\ConcurrentPriorityTaskRunnerExample.csproj", "{242134DD-9C18-4057-AB1F-28FB5517ACCA}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -33,6 +35,10 @@ Global
 		{22CFA294-267E-45E3-BD64-69787BA12900}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{22CFA294-267E-45E3-BD64-69787BA12900}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{22CFA294-267E-45E3-BD64-69787BA12900}.Release|Any CPU.Build.0 = Release|Any CPU
+		{242134DD-9C18-4057-AB1F-28FB5517ACCA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{242134DD-9C18-4057-AB1F-28FB5517ACCA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{242134DD-9C18-4057-AB1F-28FB5517ACCA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{242134DD-9C18-4057-AB1F-28FB5517ACCA}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
