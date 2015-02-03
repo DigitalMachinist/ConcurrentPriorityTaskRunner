@@ -12,7 +12,7 @@ namespace Axon.Utilities
 	enum 
 	TaskRunnerState
 	{
-		Running, Stopped, Stopping
+		Running, Starting, Stopped, Stopping
 	}
 
 
@@ -25,18 +25,50 @@ namespace Axon.Utilities
 	class 
 	ConcurrentPriorityTaskRunner
 	{
-		#region Instance members
+		#region Static members
+		
+		/// <summary>
+		/// The static singleton instance of this class.
+		/// </summary>
+		private static ConcurrentPriorityTaskRunner __instance;
 
 		/// <summary>
-		/// An event to signal the completion of all tasks in the queue.
+		/// The static getter to obtain the singleton instance of this class.
 		/// </summary>
-		public event Action AllTasksDone;
+		public static ConcurrentPriorityTaskRunner Instance {
+			get {
+				if ( __instance == null )
+				{
+					__instance = new ConcurrentPriorityTaskRunner();
+				}
+				return __instance;
+			}
+		}
+
+		#endregion
+
+
+		#region Events
+
+		/// <summary>
+		/// An event to signal the completion of all tasks in the queue. Runs after the 
+		/// CriticalTasksCompleted event is called for the triggering task completion.
+		/// </summary>
+		public event Action AllTasksCompleted;
 
 
 		/// <summary>
-		/// An event to signal the completion of all critical tasks in the queue.
+		/// An event to signal the completion of all critical tasks in the queue. Runs after the 
+		/// TaskCompleted event is called for the triggering task completion.
 		/// </summary>
-		public event Action CriticalTasksDone;
+		public event Action CriticalTasksCompleted;
+		
+
+		/// <summary>
+		/// An event to signal that all tasks in the queue have started execution. Runs after the 
+		/// TaskStarted event is called for the triggering task execution.
+		/// </summary>
+		public event Action QueueEmpty;
 
 
 		/// <summary>
@@ -51,6 +83,28 @@ namespace Axon.Utilities
 		/// </summary>
 		public event Action Stopped;
 
+		
+		/// <summary>
+		/// An event to signal that a task has finished executing.
+		/// </summary>
+		public event Action TaskCompleted;
+
+		
+		/// <summary>
+		/// An event to signal that a task has been enqueued, but has not yet begun executing.
+		/// </summary>
+		public event Action TaskEnqueued;
+
+		
+		/// <summary>
+		/// An event to signal that a task has begun executing.
+		/// </summary>
+		public event Action TaskStarted;
+
+		#endregion
+
+
+		#region Instance members
 
 		/// <summary>
 		/// A concurrent priority queue used to manage and order all of the tasks to be run.
@@ -175,6 +229,14 @@ namespace Axon.Utilities
 
 
 		/// <summary>
+		/// Indicates whether or not the state of the task runner is currently set to Starting.
+		/// </summary>
+		public bool IsStarting {
+			get { return __state == TaskRunnerState.Starting; }
+		}
+
+
+		/// <summary>
 		/// Indicates whether or not the state of the task runner is currently set to Stopped.
 		/// </summary>
 		public bool IsStopped {
@@ -261,33 +323,26 @@ namespace Axon.Utilities
 		#region Constructors
 
 		/// <summary>
-		/// Create a new default ConcurrentPriorityTaskRunner.
+		/// The static initializer for this class.
 		/// </summary>
-		public ConcurrentPriorityTaskRunner()
+		public
+		static 
+		ConcurrentPriorityTaskRunner()
 		{
-			__queue = new ConcurrentPriorityQueue<Task>();
-			__state = TaskRunnerState.Stopped;
-			__thread = null;
-			__runningCriticalTasks = 0;
-			__runningNoncriticalTasks = 0;
-			__waitingCriticalTasks = 0;
-			__waitingNoncriticalTasks = 0;
-			__runningCriticalTasksLock = new object();
-			__runningNoncriticalTasksLock = new object();
-			__waitingCriticalTasksLock = new object();
-			__waitingNoncriticalTasksLock = new object();
+			__instance = null;
 		}
 
-
 		/// <summary>
-		/// Create a new ConcurrentPriorityTaskRunner given the initial capacity of the priority 
-		/// queue that implements it internally.
+		/// Create a new default ConcurrentPriorityTaskRunner.
 		/// </summary>
-		/// <param name="initialCapacity">The initial maximum capacity of the priority queue that 
-		/// implements the task runner internally.</param>
-		public ConcurrentPriorityTaskRunner( int initialCapacity )
+		#if DEBUG
+		public
+		#else
+		private 
+		#endif
+		ConcurrentPriorityTaskRunner()
 		{
-			__queue = new ConcurrentPriorityQueue<Task>( initialCapacity );
+			__queue = new ConcurrentPriorityQueue<Task>();
 			__state = TaskRunnerState.Stopped;
 			__thread = null;
 			__runningCriticalTasks = 0;
@@ -414,6 +469,9 @@ namespace Axon.Utilities
 				throw new InvalidOperationException( "Cannot start a task runner that is not stopped." );
 			}
 
+			// Set the state to Starting.
+			__state = TaskRunnerState.Starting;
+
 			// Launch a thread to handle executing tasks on the thread pool.
 			__thread = new Thread( ThreadProc );
 			__thread.Start();
@@ -454,6 +512,8 @@ namespace Axon.Utilities
 		void 
 		onCompletedTask( PriorityValuePair<Task> elem )
 		{
+			#region Decrement counters
+
 			// Based on its priority, increment the appropriate active counter.
 			if ( elem.Priority >= MinCriticalPriority )
 			{
@@ -468,19 +528,12 @@ namespace Axon.Utilities
 					Monitor.Exit( __runningCriticalTasksLock );
 					// Unlock the thread -- CRITICAL SECTION END
 				}
+
 				// Lock the thread -- CRITICAL SECTION BEGIN
 				Monitor.Enter( __waitingCriticalTasksLock );
 				try
 				{
 					__waitingCriticalTasks--;
-					if ( __waitingCriticalTasks <= 0 )
-					{
-						__waitingCriticalTasks = 0;
-						if ( CriticalTasksDone != null )
-						{
-							CriticalTasksDone();
-						}
-					}
 				}
 				finally
 				{
@@ -501,19 +554,12 @@ namespace Axon.Utilities
 					Monitor.Exit( __runningNoncriticalTasksLock );
 					// Unlock the thread -- CRITICAL SECTION END
 				}
+
 				// Lock the thread -- CRITICAL SECTION BEGIN
 				Monitor.Enter( __waitingNoncriticalTasksLock );
 				try
 				{
 					__waitingNoncriticalTasks--;
-					if ( __waitingNoncriticalTasks <= 0 )
-					{
-						__waitingNoncriticalTasks = 0;
-						if ( AllTasksDone != null )
-						{
-							AllTasksDone();
-						}
-					}
 				}
 				finally
 				{
@@ -521,6 +567,38 @@ namespace Axon.Utilities
 					// Unlock the thread -- CRITICAL SECTION END
 				}
 			}
+
+			#endregion
+			
+			#region Emit events
+
+			// Emit an event to notify listeners that a task has finished executing.
+			if ( TaskCompleted != null )
+			{
+				TaskCompleted();
+			}
+
+			// Emit an event to notify listeners that all critical tasks have finished 
+			// executing (if so).
+			if ( __waitingCriticalTasks <= 0 )
+			{
+				if ( CriticalTasksCompleted != null )
+				{
+					CriticalTasksCompleted();
+				}
+			}
+
+			// Emit an event to notify listeners that all tasks have finished executing 
+			// (if so).
+			if ( __waitingCriticalTasks <= 0 && __waitingNoncriticalTasks <= 0 )
+			{
+				if ( AllTasksCompleted != null )
+				{
+					AllTasksCompleted();
+				}
+			}
+
+			#endregion
 		}
 
 
@@ -535,6 +613,8 @@ namespace Axon.Utilities
 		void 
 		onRunningTask( PriorityValuePair<Task> elem )
 		{
+			#region Increment counters
+
 			// Based on its priority, increment the appropriate active counter.
 			if ( elem.Priority >= MinCriticalPriority )
 			{
@@ -564,6 +644,24 @@ namespace Axon.Utilities
 					// Unlock the thread -- CRITICAL SECTION END
 				}
 			}
+
+			#endregion
+		
+			#region Emit events
+			
+			// Emit an event to notify listeners that a task has begun executing.
+			if ( TaskStarted != null )
+			{
+				TaskStarted();
+			}
+
+			// Emit an event to notify listeners that the queue is empty (if so).
+			if ( QueueEmpty != null && __queue.Peek() != null )
+			{
+				QueueEmpty();
+			}
+
+			#endregion
 		}
 
 
@@ -578,6 +676,8 @@ namespace Axon.Utilities
 		void 
 		onWaitingTask( PriorityValuePair<Task> elem )
 		{
+			#region Increment counters
+
 			// Based on its priority, increment the appropriate waiting counter.
 			if ( elem.Priority >= MinCriticalPriority )
 			{
@@ -607,6 +707,18 @@ namespace Axon.Utilities
 					// Unlock the thread -- CRITICAL SECTION END
 				}
 			}
+
+			#endregion
+		
+			#region Emit events
+			
+			// Emit an event to notify listeners that a task has been enqueued.
+			if ( TaskEnqueued != null )
+			{
+				TaskEnqueued();
+			}
+
+			#endregion
 		}
 
 
