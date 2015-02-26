@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Threading;
-using Axon.Utilities;
+using ca.axoninteractive.Utilities;
 
 namespace ConcurrentPriorityTaskRunnerExample
 {

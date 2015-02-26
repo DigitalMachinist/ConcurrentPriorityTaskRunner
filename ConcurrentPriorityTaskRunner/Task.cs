@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Threading;
 
-namespace Axon.Utilities
+namespace ca.axoninteractive.Utilities
 {
 	/// <summary>
 	/// A Task represents a single work item to be executed by the ConcurrentPriorityTaskRunner.

@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Threading;
-using Axon.Collections;
+using ca.axoninteractive.Collections;
 
-namespace Axon.Utilities
+namespace ca.axoninteractive.Utilities
 {
 	/// <summary>
 	/// An enumeration of the possible operating states that the ConcurrentPriorityTaskRunner can 
@@ -25,29 +25,6 @@ namespace Axon.Utilities
 	class 
 	ConcurrentPriorityTaskRunner
 	{
-		#region Static members
-		
-		/// <summary>
-		/// The static singleton instance of this class.
-		/// </summary>
-		private static ConcurrentPriorityTaskRunner __instance;
-
-		/// <summary>
-		/// The static getter to obtain the singleton instance of this class.
-		/// </summary>
-		public static ConcurrentPriorityTaskRunner Instance {
-			get {
-				if ( __instance == null )
-				{
-					__instance = new ConcurrentPriorityTaskRunner();
-				}
-				return __instance;
-			}
-		}
-
-		#endregion
-
-
 		#region Events
 
 		/// <summary>
@@ -323,23 +300,9 @@ namespace Axon.Utilities
 		#region Constructors
 
 		/// <summary>
-		/// The static initializer for this class.
-		/// </summary>
-		public
-		static 
-		ConcurrentPriorityTaskRunner()
-		{
-			__instance = null;
-		}
-
-		/// <summary>
 		/// Create a new default ConcurrentPriorityTaskRunner.
 		/// </summary>
-		#if DEBUG
 		public
-		#else
-		private 
-		#endif
 		ConcurrentPriorityTaskRunner()
 		{
 			__queue = new ConcurrentPriorityQueue<Task>();

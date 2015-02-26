@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using NUnit.Framework;
-using Axon.Utilities;
+using ca.axoninteractive.Utilities;
 
 namespace ConcurrentPriorityTaskRunnerTest
 {
