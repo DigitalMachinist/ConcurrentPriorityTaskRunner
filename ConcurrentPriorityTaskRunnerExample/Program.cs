@@ -10,20 +10,9 @@ namespace ConcurrentPriorityTaskRunnerExample
 		{
 			ConcurrentPriorityTaskRunner taskRunner = new ConcurrentPriorityTaskRunner();
 
-			// Enqueue a bunch of tasks.
-			taskRunner.Enqueue( 1000.0, ( context ) => { Thread.Sleep( 1000 ); Console.WriteLine( "This is a unique phrase." );						} );
-			taskRunner.Enqueue( 1000.0, ( context ) => { Thread.Sleep( 1000 ); Console.WriteLine( "So is this." );									} );
-			taskRunner.Enqueue( 1000.0, ( context ) => { Thread.Sleep( 1000 ); Console.WriteLine( "What about this one?" );							} );
-			taskRunner.Enqueue( 1000.0, ( context ) => { Thread.Sleep( 1000 ); Console.WriteLine( "Holy bujeezus!" );								} );
-			taskRunner.Enqueue( 1000.0, ( context ) => { Thread.Sleep( 1000 ); Console.WriteLine( "Could there be more?" );							} );
-			taskRunner.Enqueue( 1000.0, ( context ) => { Thread.Sleep( 1000 ); Console.WriteLine( "Whaaaaaaaaaaat!?" );								} );
-			taskRunner.Enqueue( 1000.0, ( context ) => { Thread.Sleep( 1000 ); Console.WriteLine( "I think that about covers it." );				} );
-			taskRunner.Enqueue( 1000.0, ( context ) => { Thread.Sleep( 1000 ); Console.WriteLine( "More!" );										} );
-			taskRunner.Enqueue( 1000.0, ( context ) => { Thread.Sleep( 1000 ); Console.WriteLine( "MOAR!" );										} );
-			taskRunner.Enqueue( 1000.0, ( context ) => { Thread.Sleep( 1000 ); Console.WriteLine( "M00004444RRRRRR!" );								} );
-			taskRunner.Enqueue( 1000.0, ( context ) => { Thread.Sleep( 1000 ); Console.WriteLine( "w4t!" );											} );
-			taskRunner.Enqueue( 1000.0, ( context ) => { Thread.Sleep( 1000 ); Console.WriteLine( "Seriously." );									} );
-			taskRunner.Enqueue( 1000.0, ( context ) => { Thread.Sleep( 1000 ); Console.WriteLine( "There's no way this many can run at once." );	} );
+			int workerThreads, unused;
+			ThreadPool.GetMaxThreads( out workerThreads, out unused );
+			Console.WriteLine( workerThreads );
 
 			// Set up an handler for the Stopped event
 			taskRunner.Stopped += () => {
@@ -35,6 +24,23 @@ namespace ConcurrentPriorityTaskRunnerExample
 			Console.WriteLine( "Starting..." );
 			Console.WriteLine( "" );
 			taskRunner.Start();
+
+			Thread.Sleep( 1000 );
+
+			// Enqueue a bunch of tasks.
+			taskRunner.Enqueue( 1000.0, ( context ) => { Thread.Sleep( 1000 ); Console.WriteLine( "This is a unique phrase." );						} );
+			taskRunner.Enqueue( 1000.0, ( context ) => { Thread.Sleep( 1000 ); Console.WriteLine( "So is this." );									} );
+			taskRunner.Enqueue( 1000.0, ( context ) => { Thread.Sleep( 1000 ); Console.WriteLine( "What about this one?" );							} );
+			taskRunner.Enqueue( 1000.0, ( context ) => { Thread.Sleep( 1000 ); Console.WriteLine( "Holy bujeezus!" );								} );
+			taskRunner.Enqueue( 1000.0, ( context ) => { Thread.Sleep( 1000 ); Console.WriteLine( "Could there be more?" );							} );
+			taskRunner.Enqueue( 1000.0, ( context ) => { Thread.Sleep( 1000 ); Console.WriteLine( "Whaaaaaaaaaaat!?" );								} );
+			taskRunner.Enqueue( 1000.0, ( context ) => { Thread.Sleep( 1000 ); Console.WriteLine( "I think that about covers it." );				} );
+			taskRunner.Enqueue( 1000.0, ( context ) => { Thread.Sleep( 1000 ); Console.WriteLine( "More!" );										} );
+			taskRunner.Enqueue( 2000.0, ( context ) => { Thread.Sleep( 1000 ); Console.WriteLine( "MOAR!" );										} );
+			taskRunner.Enqueue( 1000.0, ( context ) => { Thread.Sleep( 1000 ); Console.WriteLine( "M00004444RRRRRR!" );								} );
+			taskRunner.Enqueue( 1000.0, ( context ) => { Thread.Sleep( 1000 ); Console.WriteLine( "w4t!" );											} );
+			taskRunner.Enqueue( 1000.0, ( context ) => { Thread.Sleep( 1000 ); Console.WriteLine( "Seriously." );									} );
+			taskRunner.Enqueue( 1000.0, ( context ) => { Thread.Sleep( 1000 ); Console.WriteLine( "There's no way this many can run at once." );	} );
 
 			// Wait for a short time and then try to stop the task runner.
 			Thread.Sleep( 5000 );

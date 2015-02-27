@@ -390,8 +390,10 @@ namespace ca.axoninteractive.Utilities
 		/// <param name="context">The execution context object that will be passed to the callback 
 		/// when the callback is called by the thread pool.</param>
 		/// <param name="callback">A callback function to be executed on a thread pool.</param>
+		/// <returns>A ManualResetEvent that will be signaled once the newly created task 
+		/// completes.</returns>
 		public 
-		void 
+		ManualResetEvent 
 		Enqueue( double priority, WaitCallback callback, object context = null )
 		{
 			if ( IsStopping )
@@ -412,9 +414,15 @@ namespace ca.axoninteractive.Utilities
 
 			// Subscribe an event listener to the task's CallbackReturned event that will release 
 			// the task resources and allow another to run.
-			task.CallbackReturned += () => {
+			ManualResetEvent resetEvent = new ManualResetEvent( false ); 
+			task.TaskComplete += delegate {
 				onCompletedTask( elem );
+				resetEvent.Set();
 			};
+
+			// Return the ManualResetEvent to the caller so they can be aware of when this task 
+			// finishes execution.
+			return resetEvent;
 		}
 
 
@@ -732,14 +740,14 @@ namespace ca.axoninteractive.Utilities
 				else
 				{
 					// Yield the rest of the time slice.
-					Thread.Sleep( 0 );
+					Thread.Sleep( 1 );
 				}
 			}
 
 			// Wait for all critical tasks to finish running before stopping.
 			while ( HasWaitingCriticalTasks )
 			{
-				Thread.Sleep( 0 );
+				Thread.Sleep( 1 );
 			}
 
 			// Flag the task runner as stopped.

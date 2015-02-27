@@ -127,9 +127,9 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:afb4e05e3fdeca998008785a04003a342"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classca_1_1axoninteractive_1_1_utilities_1_1_concurrent_priority_task_runner.html#afb4e05e3fdeca998008785a04003a342">Clear</a> ()</td></tr>
 <tr class="memdesc:afb4e05e3fdeca998008785a04003a342"><td class="mdescLeft">&#160;</td><td class="mdescRight">Clear the task runner of all enqueued tasks.  <a href="#afb4e05e3fdeca998008785a04003a342">More...</a><br /></td></tr>
 <tr class="separator:afb4e05e3fdeca998008785a04003a342"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a11cb1ea851e22710673de9fbdc50125d"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classca_1_1axoninteractive_1_1_utilities_1_1_concurrent_priority_task_runner.html#a11cb1ea851e22710673de9fbdc50125d">Enqueue</a> (double priority, WaitCallback callback, object context=null)</td></tr>
-<tr class="memdesc:a11cb1ea851e22710673de9fbdc50125d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Enqueue a new task to be run.  <a href="#a11cb1ea851e22710673de9fbdc50125d">More...</a><br /></td></tr>
-<tr class="separator:a11cb1ea851e22710673de9fbdc50125d"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a2d1518b180dedf2336c63c07933cba90"><td class="memItemLeft" align="right" valign="top">ManualResetEvent&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classca_1_1axoninteractive_1_1_utilities_1_1_concurrent_priority_task_runner.html#a2d1518b180dedf2336c63c07933cba90">Enqueue</a> (double priority, WaitCallback callback, object context=null)</td></tr>
+<tr class="memdesc:a2d1518b180dedf2336c63c07933cba90"><td class="mdescLeft">&#160;</td><td class="mdescRight">Enqueue a new task to be run.  <a href="#a2d1518b180dedf2336c63c07933cba90">More...</a><br /></td></tr>
+<tr class="separator:a2d1518b180dedf2336c63c07933cba90"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a2beeb16717069d0ea5a0af2d2b5f9b28"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classca_1_1axoninteractive_1_1_utilities_1_1_concurrent_priority_task_runner.html#a2beeb16717069d0ea5a0af2d2b5f9b28">Start</a> ()</td></tr>
 <tr class="memdesc:a2beeb16717069d0ea5a0af2d2b5f9b28"><td class="mdescLeft">&#160;</td><td class="mdescRight">Start the task runner by launching the thread work function.  <a href="#a2beeb16717069d0ea5a0af2d2b5f9b28">More...</a><br /></td></tr>
 <tr class="separator:a2beeb16717069d0ea5a0af2d2b5f9b28"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -256,12 +256,12 @@ Events</h2></td></tr>
 
 </div>
 </div>
-<a class="anchor" id="a11cb1ea851e22710673de9fbdc50125d"></a>
+<a class="anchor" id="a2d1518b180dedf2336c63c07933cba90"></a>
 <div class="memitem">
 <div class="memproto">
       <table class="memname">
         <tr>
-          <td class="memname">void ca.axoninteractive.Utilities.ConcurrentPriorityTaskRunner.Enqueue </td>
+          <td class="memname">ManualResetEvent ca.axoninteractive.Utilities.ConcurrentPriorityTaskRunner.Enqueue </td>
           <td>(</td>
           <td class="paramtype">double&#160;</td>
           <td class="paramname"><em>priority</em>, </td>
@@ -295,6 +295,7 @@ Events</h2></td></tr>
   </table>
   </dd>
 </dl>
+<dl class="section return"><dt>Returns</dt><dd>A ManualResetEvent that will be signaled once the newly created task completes.</dd></dl>
 
 </div>
 </div>
@@ -829,7 +830,7 @@ Events</h2></td></tr>
 <div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
   <ul>
     <li class="navelem"><a class="el" href="namespaceca.html">ca</a></li><li class="navelem"><a class="el" href="namespaceca_1_1axoninteractive.html">axoninteractive</a></li><li class="navelem"><a class="el" href="namespaceca_1_1axoninteractive_1_1_utilities.html">Utilities</a></li><li class="navelem"><a class="el" href="classca_1_1axoninteractive_1_1_utilities_1_1_concurrent_priority_task_runner.html">ConcurrentPriorityTaskRunner</a></li>
-    <li class="footer">Generated on Thu Feb 26 2015 17:15:32 for ConcurrentPriorityTaskRunner by
+    <li class="footer">Generated on Fri Feb 27 2015 15:22:16 for ConcurrentPriorityTaskRunner by
     <a href="http://www.doxygen.org/index.html">
     <img class="footer" src="doxygen.png" alt="doxygen"/></a> 1.8.9 </li>
   </ul>

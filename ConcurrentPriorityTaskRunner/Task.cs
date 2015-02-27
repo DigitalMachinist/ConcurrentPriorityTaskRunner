@@ -27,7 +27,7 @@ namespace ca.axoninteractive.Utilities
 		/// <summary>
 		/// An event to signal the completion of this task.
 		/// </summary>
-		public event Action CallbackReturned;
+		public event Action TaskComplete;
 
 		#endregion
 
@@ -69,9 +69,9 @@ namespace ca.axoninteractive.Utilities
 				throw new InvalidOperationException( "Cannot Run() a task with a null Callback." );
 			}
 			Callback( Context );
-			if ( CallbackReturned != null ) 
+			if ( TaskComplete != null ) 
 			{
-				CallbackReturned();
+				TaskComplete();
 			}
 		}
 
